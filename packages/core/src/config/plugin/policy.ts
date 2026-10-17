@@ -52,7 +52,9 @@ export const Plugin = define({
           .map((resource) =>
             current.findLast(
               (policy) =>
-                policy.action === "tool.use" && Wildcard.match(`${event.action}:${resource}`, policy.resource),
+                policy.action === "tool.use" &&
+                (Wildcard.match(`${event.action}:${resource}`, policy.resource) ||
+                  (resource === "*" && Wildcard.match(event.action, policy.resource))),
             ),
           )
           .find((policy) => policy?.effect === "deny")

@@ -1,5 +1,8 @@
 import { describe, expect } from "bun:test"
 import { Document, Event, Info, type Entry } from "@opencode/schema/config"
+import { Agent } from "@opencode/core/agent"
+import { SessionMessage } from "@opencode/core/session/message"
+import { Tool } from "@opencode/core/tool"
 import { ConfigPolicy } from "@opencode/schema/config/policy"
 import { Permission } from "@opencode/schema/permission"
 import { Config } from "@opencode/core/config"
@@ -47,7 +50,33 @@ const evaluate = Effect.fn(function* (action: string, resources: string[], effec
   return { effect: event.effect, message: event.message }
 })
 
+const assertCodeModePolicyDenied = (resource: string) =>
+  Effect.gen(function* () {
+    yield* addPlugin([document(tool("deny", resource))])
+    const tools = yield* Tool.Service
+    const snapshot = yield* tools.snapshot()
+    const error = yield* snapshot.execute({
+      sessionID: Session.ID.make("ses_policy_codemode"),
+      agent: Agent.ID.make("build"),
+      messageID: SessionMessage.ID.make("msg_policy_codemode"),
+      call: {
+        type: "tool-call",
+        id: "call_policy_codemode",
+        name: "execute",
+        input: { code: "return 1 + 1" },
+      },
+    }).pipe(Effect.flip)
+    expect(error).toBeInstanceOf(Tool.Error)
+    expect(error.message).toBe("Blocked by configuration policy")
+  })
+
 describe("ConfigPolicyPlugin.Plugin", () => {
+  it.effect("blocks Code Mode when the execute:* policy denies it", () => assertCodeModePolicyDenied("execute:*"))
+
+  it.effect("blocks Code Mode when the exact execute policy denies it", () => assertCodeModePolicyDenied("execute"))
+
+  it.effect("blocks Code Mode when the wildcard policy denies it", () => assertCodeModePolicyDenied("*"))
+
   it.effect("preserves last-match precedence for tool.use without granting approvals", () =>
     Effect.gen(function* () {
       yield* addPlugin([

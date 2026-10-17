@@ -274,8 +274,18 @@ const layer = Layer.effect(
               if (!requested && input.definitions && (direct.has(event.tool) || codeModeTool?.name === event.tool))
                 return yield* new Tool.Error({ message: `Tool is not available for this request: ${event.tool}` })
               const name = requested?.name ?? event.tool
-              if (name === "execute" && codeModeTool)
+              if (name === "execute" && codeModeTool) {
+                const policy = yield* hooks.trigger("permission", "evaluate", {
+                  sessionID: context.sessionID,
+                  agent: context.agent,
+                  action: "execute",
+                  resources: ["*"],
+                  effect: "allow",
+                })
+                if (policy.effect === "deny")
+                  return yield* new Tool.Error({ message: policy.message ?? "Blocked by configuration policy" })
                 return yield* executeTool(codeModeTool, name, event.input, context)
+              }
               const tool = direct.get(name)
               if (tool) return yield* executeTool(tool, name, event.input, context)
               return yield* new Tool.Error({
